@@ -458,7 +458,7 @@ open class EPUBNavigatorViewController: InputObservableViewController,
 
     // MARK: - Pagination and spreads
 
-    private var paginationView: PaginationView?
+    var paginationView: PaginationView?
 
     private func makePaginationView(hasPositions: Bool) -> PaginationView {
         let view = PaginationView(
