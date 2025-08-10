@@ -42,37 +42,54 @@ open class CustomEPUBNavigatorViewController: EPUBNavigatorViewController {
                 var after = surroundingText.substring(offset + 1);
                 var highlight = tappedChar;
                 
+                // Helper function to get next text node
+                function getNextTextNode(node) {
+                    var walker = document.createTreeWalker(
+                        document.body,
+                        NodeFilter.SHOW_TEXT,
+                        {
+                            acceptNode: function(node) {
+                                // Skip text nodes inside <rt> tags
+                                var parent = node.parentNode;
+                                while (parent) {
+                                    if (parent.tagName && parent.tagName.toLowerCase() === 'rt') {
+                                        return NodeFilter.FILTER_REJECT;
+                                    }
+                                    parent = parent.parentNode;
+                                }
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                        }
+                    );
+                    
+                    walker.currentNode = node;
+                    return walker.nextNode();
+                }
+                
                 // Forward extraction starting after tapped char
                 var text = '';
-                var current = node;
                 var charsCollected = 0;
-                var localOffset = offset + 1; // Start after tapped char
+                var currentNode = node;
+                var currentOffset = offset + 1; // Start after tapped char
                 
-                while (current && charsCollected < maxChars) {
-                    if (current.nodeType === 3) { // Text node
-                        var nodeText = current.textContent.substring(localOffset);
-                        text += nodeText;
-                        charsCollected += nodeText.length;
-                        localOffset = 0; // Reset for next nodes
-                    } else if (current.nodeType === 1) { // Element
-                        // Skip <rt> (ruby annotations)
-                        if (current.tagName.toLowerCase() === 'rt') {
-                            current = current.nextSibling;
-                            continue;
+                while (charsCollected < maxChars) {
+                    if (currentNode && currentNode.nodeType === 3) {
+                        // Get remaining text from current node
+                        var remainingText = currentNode.textContent.substring(currentOffset);
+                        if (remainingText.length > 0) {
+                            var charsToTake = Math.min(remainingText.length, maxChars - charsCollected);
+                            text += remainingText.substring(0, charsToTake);
+                            charsCollected += charsToTake;
+                            
+                            if (charsCollected >= maxChars) break;
                         }
-                        // Traverse children
-                        current = current.firstChild || current.nextSibling;
-                        continue;
                     }
-                    // Move to next
-                    if (current.nextSibling) {
-                        current = current.nextSibling;
-                    } else {
-                        while (current.parentNode && !current.parentNode.nextSibling) {
-                            current = current.parentNode;
-                        }
-                        current = current.parentNode ? current.parentNode.nextSibling : null;
-                    }
+                    
+                    // Move to next text node
+                    currentNode = getNextTextNode(currentNode);
+                    currentOffset = 0; // Reset offset for new nodes
+                    
+                    if (!currentNode) break;
                 }
                 
                 // Trim to maxChars and stop at punctuation (e.g., 。、！？)
