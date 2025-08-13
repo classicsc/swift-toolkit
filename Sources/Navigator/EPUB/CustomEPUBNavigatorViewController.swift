@@ -11,12 +11,16 @@ public struct HtmlPositionInfo {
     public let htmlOffset: Int
     public let rubyAwareText: String
     public let originalText: String
+    public let cssPath: String
+    public let charOffset: Int
     
-    public init(hasRubyText: Bool, htmlOffset: Int, rubyAwareText: String, originalText: String) {
+    public init(hasRubyText: Bool, htmlOffset: Int, rubyAwareText: String, originalText: String, cssPath: String, charOffset: Int) {
         self.hasRubyText = hasRubyText
         self.htmlOffset = htmlOffset
         self.rubyAwareText = rubyAwareText
         self.originalText = originalText
+        self.cssPath = cssPath
+        self.charOffset = charOffset
     }
 }
 
@@ -46,6 +50,52 @@ open class CustomEPUBNavigatorViewController: EPUBNavigatorViewController {
             var x = \(pointInWebView.x);
             var y = \(pointInWebView.y);
             var maxChars = \(maxChars);
+            
+            function generateCSSPath(node) {
+                if (node.nodeType !== 3) return '';
+                
+                var element = node.parentElement;
+                if (!element) return '';
+                
+                var path = [];
+                
+                while (element && element !== document.body) {
+                    var selector = element.tagName.toLowerCase();
+                    
+                    if (element.id) {
+                        selector += '#' + element.id;
+                        path.unshift(selector);
+                        break;
+                    } else {
+                        var siblings = Array.from(element.parentNode.children);
+                        var sameTagSiblings = siblings.filter(function(sibling) {
+                            return sibling.tagName === element.tagName;
+                        });
+                        
+                        if (sameTagSiblings.length > 1) {
+                            var index = sameTagSiblings.indexOf(element) + 1;
+                            selector += ':nth-of-type(' + index + ')';
+                        }
+                        
+                        path.unshift(selector);
+                        element = element.parentElement;
+                    }
+                }
+                
+                return path.join(' > ');
+            }
+            
+            function getTextNodeIndex(textNode) {
+                var parent = textNode.parentNode;
+                if (!parent) return 0;
+                
+                var textNodes = Array.from(parent.childNodes).filter(function(node) {
+                    return node.nodeType === 3;
+                });
+                
+                return textNodes.indexOf(textNode);
+            }
+            
             var range = document.caretRangeFromPoint(x, y);
             if (range && range.startContainer.nodeType === 3) {
                 var node = range.startContainer;
@@ -56,6 +106,14 @@ open class CustomEPUBNavigatorViewController: EPUBNavigatorViewController {
                 var before = surroundingText.substring(0, offset);
                 var after = surroundingText.substring(offset + 1);
                 var highlight = tappedChar;
+                
+                // Generate CSS path and character offset for the text node
+                var cssPath = generateCSSPath(node);
+                var textNodeIndex = getTextNodeIndex(node);
+                if (textNodeIndex > 0) {
+                    cssPath += '::text-node(' + textNodeIndex + ')';
+                }
+                var charOffset = offset;
                 
                 // Initialize variables
                 var hasRubyText = false;
@@ -303,7 +361,9 @@ open class CustomEPUBNavigatorViewController: EPUBNavigatorViewController {
                     hasRubyText: hasRubyText,
                     htmlOffset: htmlOffset,
                     rubyAwareText: rubyAwareText,
-                    originalText: originalText
+                    originalText: originalText,
+                    cssPath: cssPath,
+                    charOffset: charOffset
                 };
             }
             return null;
@@ -328,6 +388,8 @@ open class CustomEPUBNavigatorViewController: EPUBNavigatorViewController {
         let htmlOffset = json["htmlOffset"] as? Int ?? offset
         let rubyAwareText = json["rubyAwareText"] as? String ?? ""
         let originalText = json["originalText"] as? String ?? ""
+        let cssPath = json["cssPath"] as? String ?? ""
+        let charOffset = json["charOffset"] as? Int ?? offset
         
         // Construct Locator if possible (fall back to currentLocation if failed).
         guard let href = currentLocation?.href else {
@@ -347,7 +409,9 @@ open class CustomEPUBNavigatorViewController: EPUBNavigatorViewController {
             hasRubyText: hasRubyText,
             htmlOffset: htmlOffset,
             rubyAwareText: rubyAwareText,
-            originalText: originalText
+            originalText: originalText,
+            cssPath: cssPath,
+            charOffset: charOffset
         )
         
         return (tappedChar, forwardText, locator, htmlInfo)
